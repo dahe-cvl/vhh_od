@@ -103,7 +103,7 @@ OdCore:
   DS_NUM_INIT: 3
   ###
   # Max number of frames to return at the same time from getFramesByShots_NEW
-  MAX_FRAMES: 2000
+  MAX_FRAMES: 16
   ###
   # Enables the classifier
   USE_CLASSIFIER: 1

@@ -9,3 +9,7 @@ pillow
 scipy
 wandb
 sklearn
+
+# For yolov5
+pandas
+seaborn

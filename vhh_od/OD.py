@@ -19,6 +19,13 @@ from torch.utils import data
 from torchvision import transforms
 from collections import namedtuple
 
+from os import path
+sys.path.append(path.abspath('../yolov5'))
+sys.path.append(path.abspath('../yolov5/utils'))
+
+from yolov5.utils.general import non_max_suppression
+from yolov5.models.common import Detections
+
 Detection_Data = namedtuple('Detection_Data', 'x1 x2 y1 y2 ids obj_class obj_conf class_conf num_results')
 
 class OD(object):
@@ -121,17 +128,20 @@ class OD(object):
         Creates and loads weight into the mode, loads classes, loads resized dims, and creates preprocess object
         """
 
-        printCustom(f"Initializing Model using \"{self.config_instance.model_config_path}\"...", STDOUT_TYPE.INFO)
-        self.model = Darknet(config_path=self.config_instance.model_config_path,
-                        img_size=self.config_instance.resize_dim).to(self.device)
+        # printCustom(f"Initializing Model using \"{self.config_instance.model_config_path}\"...", STDOUT_TYPE.INFO)
+        # self.model = Darknet(config_path=self.config_instance.model_config_path,
+        #                 img_size=self.config_instance.resize_dim).to(self.device)
 
-        printCustom(f"Loading Weights from \"{self.config_instance.path_pre_trained_model}\"...", STDOUT_TYPE.INFO)
-        if self.config_instance.path_pre_trained_model.endswith(".weights"):
-            # Load darknet weights
-            self.model.load_darknet_weights(self.config_instance.path_pre_trained_model)
-        else:
-            # Load checkpoint weights
-            self.model.load_state_dict(torch.load(self.config_instance.path_pre_trained_model))
+        # printCustom(f"Loading Weights from \"{self.config_instance.path_pre_trained_model}\"...", STDOUT_TYPE.INFO)
+        # if self.config_instance.path_pre_trained_model.endswith(".weights"):
+        #     # Load darknet weights
+        #     self.model.load_darknet_weights(self.config_instance.path_pre_trained_model)
+        # else:
+        #     # Load checkpoint weights
+        #     self.model.load_state_dict(torch.load(self.config_instance.path_pre_trained_model))
+
+        self.model = torch.hub.load('ultralytics/yolov5', 'yolov5x', pretrained=True)
+
 
         printCustom(f"Loading Class Names from \"{self.config_instance.model_class_names_path}\"... ", STDOUT_TYPE.INFO)
         self.classes = load_classes(self.config_instance.model_class_names_path)
@@ -191,9 +201,9 @@ class OD(object):
         y1_list = y
         y2_list = y + h
         ids = None
-        object_confs = frame_based_predictions[:,4].cpu().numpy()
-        class_confs = frame_based_predictions[:,5].cpu().numpy()
-        object_classes = frame_based_predictions[:, 6].cpu().numpy()
+        object_confs = frame_based_predictions[:,4]
+        class_confs = frame_based_predictions[:,5]
+        object_classes = frame_based_predictions[:, 6]
         num_results = len(frame_based_predictions)
         data = Detection_Data(x1_list, x2_list, y1_list, y2_list, ids, object_classes, object_confs, class_confs, num_results)
         return self.detection_data_to_custom_obj(data, frame_id)
@@ -248,13 +258,15 @@ class OD(object):
         """
         Rescales bounding boxes to fit original video resolution
         """
+        # print("frame_based_predictions:", frame_based_predictions)
         im = cv2.cvtColor(image_orig, cv2.COLOR_BGR2RGB)
         y_factor = im.shape[0] / self.resized_dim_y
         x_factor = im.shape[1] / self.resized_dim_x
-        x = (frame_based_predictions[:, 0]).cpu().numpy() * x_factor
-        y = (frame_based_predictions[:, 1]).cpu().numpy() * y_factor
-        w = (frame_based_predictions[:, 2]).cpu().numpy() * x_factor - x
-        h = (frame_based_predictions[:, 3]).cpu().numpy() * y_factor - y
+        x = (frame_based_predictions[:, 0]) * x_factor
+        y = (frame_based_predictions[:, 1]) * y_factor
+        w = (frame_based_predictions[:, 2]) * x_factor - x
+        h = (frame_based_predictions[:, 3]) * y_factor - y
+        # print("xy:", x,y)
         return im, x, y, w, h
 
     def apply_tracker(self, x, y, w, h, im, frame_id, new_custom_objects, frame_based_predictions, vis = False):
@@ -264,8 +276,8 @@ class OD(object):
         bbox_xywh = np.array([[x[i],y[i],w[i],h[i]] for i in range(len(frame_based_predictions))])
 
         # get class confidences
-        cls_conf = frame_based_predictions[:, 5].cpu().numpy()
-        class_predictions = frame_based_predictions[:, 6].cpu().numpy()
+        cls_conf = frame_based_predictions[:, 5]
+        class_predictions = frame_based_predictions[:, 6]
 
         # Track Objects using Deep Sort tracker
         # Tracker expects Input as XYWH but returns Boxes as XYXY
@@ -467,7 +479,7 @@ class OD(object):
                 print(f"Duration: {stop - start} Frames")
 
             # Run vhh_od detector get predictions
-            predictions_l = self.runModel(model=self.model, tensor_l=shot_tensors, classes=self.classes, class_filter=self.class_selection)
+            predictions_l = self.runModel(model=self.model, image=images_orig, tensor_l=shot_tensors, classes=self.classes, class_filter=self.class_selection)
 
             # Reset tracker for every new shot
             if self.use_tracker and previous_shot_id != shot_id:
@@ -515,7 +527,7 @@ class OD(object):
                                                     save_as_video_flag=True
                                                     ) '''
 
-    def runModel(self, model, tensor_l, classes, class_filter):
+    def runModel(self, model, tensor_l, image, classes, class_filter):
         """
         Method to calculate stc predictions of specified model and given list of tensor images (pytorch).
 
@@ -525,51 +537,101 @@ class OD(object):
                  the number of hits within a shot,
                  frame-based predictions for a whole shot
         """
-        # run vhh_od detector
+        coco_classes = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
+        'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
+        'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
+        'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard',
+        'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple',
+        'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch',
+        'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone',
+        'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear',
+        'hair drier', 'toothbrush']
+        
+        y = model(tensor_l)
+        y = non_max_suppression(y, conf_thres=0.25, iou_thres=0.45, classes=model.classes)
+
+
+        # try:
+        #     det = Detections(image, y, [os.path.join("/caa/Homes01/fjogl/test_yolov5",str(i) + ".png") for i in range(0,20)], names=coco_classes)
+        #     # det.display(save = True)
+        # except:
+        #     print("detection threw error")
+        # return []
+
+        y = [t.cpu().detach().numpy() for t in y]
+        y = [t for t in y]
+
+        # print("\n\n")
+        # print(y[0])
+        # print("Before: ", y[0].shape)
+        # Drop non persons
+        y = [t[t[:,5] == 0.0] for t in y]
+
+        # print("After: ", y[0].shape)
+        # print(y[0])
+        # print("\n\n")
+
+        # Add dummy columne to fulfill size
+        y = [np.c_[ t[:, 0:4], np.zeros(t.shape[0]), t[:,4:6] ] for t in y] 
+        # print("FINAL: ", [y[i].shape for i in range(len(y))])
+
+        # If no predictions then return None
+        y = [None if t.shape[0] == 0 else t for t in y]
+        # print(y[0])
+        return y
 
         # prepare pytorch dataloader
-        Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
-        dataset = data.TensorDataset(tensor_l)  # create your datset
-        inference_dataloader = data.DataLoader(dataset=dataset,
-                                               batch_size=self.config_instance.batch_size)
+        # Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
+        # dataset = data.TensorDataset(tensor_l)  # create your datset
+        # inference_dataloader = data.DataLoader(dataset=dataset,
+        #                                        batch_size=self.config_instance.batch_size)
 
-        predictions_l = []
-        for i, inputs in enumerate(inference_dataloader):
-            input_batch = inputs[0]
-            input_batch = Variable(input_batch.type(Tensor))
+        # predictions_l = []
+        # for i, inputs in enumerate(inference_dataloader):
+            # input_batch = inputs[0]
+            # input_batch = Variable(input_batch.type(Tensor))
 
-            # move the input and model to GPU for speed if available
-            if torch.cuda.is_available():
-                input_batch = input_batch.to('cuda')
-                model.to('cuda')
+            # # move the input and model to GPU for speed if available
+            # if torch.cuda.is_available():
+            #     input_batch = input_batch.to('cuda')
+            #     model.to('cuda')
 
-            model.eval()
-            with torch.no_grad():
-                output = model(input_batch)
-                batch_detections = non_max_suppression(prediction=output,
-                                                 conf_thres=self.config_instance.confidence_threshold,
-                                                 nms_thres=self.config_instance.nms_threshold)
+            # model.eval()
+            # with torch.no_grad():
+            #     output = model(input_batch)
+            #     output = model(['https://ultralytics.com/images/zidane.jpg'])
+            #     output.print()
+            #     output.save()  # or .show()
 
-                for frame_detection in batch_detections:
+            #     output.xyxy[0]  # img1 predictions (tensor)
+            #     output.pandas().xyxy[0]
+            #     exit()
 
-                    filtered_detection = None
 
-                    if frame_detection is not None:
+                # batch_detections = non_max_suppression(prediction=output,
+                #                                  conf_thres=self.config_instance.confidence_threshold,
+                #                                  nms_thres=self.config_instance.nms_threshold)
 
-                        for i in range(len(frame_detection)):
+        #         for frame_detection in batch_detections:
 
-                            detected_object = frame_detection[i]
-                            class_idx = detected_object[6].int().item()
+        #             filtered_detection = None
 
-                            if classes[class_idx] in class_filter:
-                                if filtered_detection is None:
-                                    filtered_detection = detected_object.unsqueeze(dim=0)
-                                else:
-                                    filtered_detection = torch.cat([filtered_detection, detected_object.unsqueeze(dim=0)], dim=0)
+        #             if frame_detection is not None:
 
-                    predictions_l.append(filtered_detection)
+        #                 for i in range(len(frame_detection)):
 
-        return predictions_l
+        #                     detected_object = frame_detection[i]
+        #                     class_idx = detected_object[6].int().item()
+
+        #                     if classes[class_idx] in class_filter:
+        #                         if filtered_detection is None:
+        #                             filtered_detection = detected_object.unsqueeze(dim=0)
+        #                         else:
+        #                             filtered_detection = torch.cat([filtered_detection, detected_object.unsqueeze(dim=0)], dim=0)
+
+        #             predictions_l.append(filtered_detection)
+
+        # return predictions_l
 
     def loadStcResults(self, stc_results_path):
         """
