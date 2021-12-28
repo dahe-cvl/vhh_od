@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 
 video1_path = "/data/share/fjogl/vhh_od_dev_results/raw_results/vis/8220_results_yolov3.avi"
-video2_path = "/data/share/fjogl/vhh_od_dev_results/raw_results/vis/8220_results_yolov5.avi"
+video2_path = "/data/share/fjogl/vhh_od_dev_results/raw_results/vis/8220_results.avi"
 
 video1_info = "YOLOv3"
 video2_info = "YOLOv5"
@@ -17,7 +17,7 @@ output_path = "/data/share/fjogl/vhh_od_dev_results/raw_results/vis/output.mp4"
 
 def main():
     cap1 = cv2.VideoCapture(video1_path)
-    cap2 = cv2.VideoCapture(video1_path)
+    cap2 = cv2.VideoCapture(video2_path)
 
     out, fourcc = None, None
 
