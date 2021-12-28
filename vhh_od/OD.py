@@ -536,102 +536,22 @@ class OD(object):
         :return: predicted class_name for each tensor frame,
                  the number of hits within a shot,
                  frame-based predictions for a whole shot
-        """
-        coco_classes = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
-        'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
-        'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
-        'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard',
-        'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple',
-        'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch',
-        'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone',
-        'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear',
-        'hair drier', 'toothbrush']
-        
+        """    
         y = model(tensor_l)
         y = non_max_suppression(y, conf_thres=0.25, iou_thres=0.45, classes=model.classes)
-
-
-        # try:
-        #     det = Detections(image, y, [os.path.join("/caa/Homes01/fjogl/test_yolov5",str(i) + ".png") for i in range(0,20)], names=coco_classes)
-        #     # det.display(save = True)
-        # except:
-        #     print("detection threw error")
-        # return []
 
         y = [t.cpu().detach().numpy() for t in y]
         y = [t for t in y]
 
-        # print("\n\n")
-        # print(y[0])
-        # print("Before: ", y[0].shape)
         # Drop non persons
         y = [t[t[:,5] == 0.0] for t in y]
 
-        # print("After: ", y[0].shape)
-        # print(y[0])
-        # print("\n\n")
-
         # Add dummy columne to fulfill size
         y = [np.c_[ t[:, 0:4], np.zeros(t.shape[0]), t[:,4:6] ] for t in y] 
-        # print("FINAL: ", [y[i].shape for i in range(len(y))])
 
         # If no predictions then return None
         y = [None if t.shape[0] == 0 else t for t in y]
-        # print(y[0])
         return y
-
-        # prepare pytorch dataloader
-        # Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
-        # dataset = data.TensorDataset(tensor_l)  # create your datset
-        # inference_dataloader = data.DataLoader(dataset=dataset,
-        #                                        batch_size=self.config_instance.batch_size)
-
-        # predictions_l = []
-        # for i, inputs in enumerate(inference_dataloader):
-            # input_batch = inputs[0]
-            # input_batch = Variable(input_batch.type(Tensor))
-
-            # # move the input and model to GPU for speed if available
-            # if torch.cuda.is_available():
-            #     input_batch = input_batch.to('cuda')
-            #     model.to('cuda')
-
-            # model.eval()
-            # with torch.no_grad():
-            #     output = model(input_batch)
-            #     output = model(['https://ultralytics.com/images/zidane.jpg'])
-            #     output.print()
-            #     output.save()  # or .show()
-
-            #     output.xyxy[0]  # img1 predictions (tensor)
-            #     output.pandas().xyxy[0]
-            #     exit()
-
-
-                # batch_detections = non_max_suppression(prediction=output,
-                #                                  conf_thres=self.config_instance.confidence_threshold,
-                #                                  nms_thres=self.config_instance.nms_threshold)
-
-        #         for frame_detection in batch_detections:
-
-        #             filtered_detection = None
-
-        #             if frame_detection is not None:
-
-        #                 for i in range(len(frame_detection)):
-
-        #                     detected_object = frame_detection[i]
-        #                     class_idx = detected_object[6].int().item()
-
-        #                     if classes[class_idx] in class_filter:
-        #                         if filtered_detection is None:
-        #                             filtered_detection = detected_object.unsqueeze(dim=0)
-        #                         else:
-        #                             filtered_detection = torch.cat([filtered_detection, detected_object.unsqueeze(dim=0)], dim=0)
-
-        #             predictions_l.append(filtered_detection)
-
-        # return predictions_l
 
     def loadStcResults(self, stc_results_path):
         """
