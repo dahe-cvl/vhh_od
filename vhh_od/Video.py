@@ -236,47 +236,6 @@ class Video(object):
 
         cap.release()
 
-    # Returns Video Shot by Shot
-    def getFramesByShots(self, preprocess_pytorch=None):
-        # initialize video capture
-        cap = cv2.VideoCapture(self.vidFile)
-        cnt = 0
-
-        for shot in self.shot_list:
-
-            frame_l = []
-            frames_orig = []
-            start_pos = shot.start_pos
-            end_pos = shot.end_pos
-
-            #print(f"Retrieving Frames for Shot {shot.sid} (frames {cnt} to {end_pos})...")
-
-            while cnt <= end_pos:
-                cnt = cnt + 1
-                ret, frame_orig = cap.read()
-
-                # skip to start position (for gradual cuts)
-                if cnt < start_pos:
-                    continue
-
-                if ret == True:
-                    if preprocess_pytorch is not None:
-                        frame = preprocess_pytorch(frame_orig)
-                        frame_l.append(frame)
-
-                    # Deep Sort Tracker needs original image in RGB Space
-                    frames_orig.append(cv2.cvtColor(frame_orig, cv2.COLOR_BGR2RGB))
-                else:
-                    break
-
-            if preprocess_pytorch is not None:
-                all_tensors_l = torch.stack(frame_l)
-                yield {"Tensors": all_tensors_l, "Images": frames_orig, "ShotInfo": shot}
-            else:
-                yield {"Tensors": None, "Images": frames_orig, "ShotInfo": shot}
-
-        cap.release()
-
     def getShotFromID(self, sid=-1):
         for shot in self.shot_list:
             if(shot.sid == sid):

@@ -141,7 +141,9 @@ class OD(object):
         #     self.model.load_state_dict(torch.load(self.config_instance.path_pre_trained_model))
 
         self.model = torch.hub.load('ultralytics/yolov5', 'yolov5x', pretrained=True)
-
+        self.model.conf = 0.01  # confidence threshold (0-1)
+        self.model.iou = 0.7 # NMS IoU threshold (0-1)
+        # self.model.classes = [0]
 
         printCustom(f"Loading Class Names from \"{self.config_instance.model_class_names_path}\"... ", STDOUT_TYPE.INFO)
         self.classes = load_classes(self.config_instance.model_class_names_path)
@@ -479,7 +481,7 @@ class OD(object):
                 print(f"Duration: {stop - start} Frames")
 
             # Run vhh_od detector get predictions
-            predictions_l = self.runModel(model=self.model, image=images_orig, tensor_l=shot_tensors, classes=self.classes, class_filter=self.class_selection)
+            predictions_l = self.runModel(model=self.model, images=images_orig, tensor_l=shot_tensors, classes=self.classes, class_filter=self.class_selection)
 
             # Reset tracker for every new shot
             if self.use_tracker and previous_shot_id != shot_id:
@@ -527,7 +529,7 @@ class OD(object):
                                                     save_as_video_flag=True
                                                     ) '''
 
-    def runModel(self, model, tensor_l, image, classes, class_filter):
+    def runModel(self, model, tensor_l, images, classes, class_filter):
         """
         Method to calculate stc predictions of specified model and given list of tensor images (pytorch).
 
@@ -537,21 +539,52 @@ class OD(object):
                  the number of hits within a shot,
                  frame-based predictions for a whole shot
         """    
-        y = model(tensor_l)
-        y = non_max_suppression(y, conf_thres=0.25, iou_thres=0.45, classes=model.classes)
+        # y = model(tensor_l)
+        # y = non_max_suppression(y, classes=model.classes)
 
-        y = [t.cpu().detach().numpy() for t in y]
-        y = [t for t in y]
+        # y = [t.cpu().detach().numpy() for t in y]
+        # y = [t for t in y]
 
+        # # Drop non persons
+        # y = [t[t[:,5] == 0.0] for t in y]
+
+        # # Add dummy columne to fulfill size
+        # y = [np.c_[ t[:, 0:4], np.zeros(t.shape[0]), t[:,4:6] ] for t in y] 
+
+        # # If no predictions then return None
+        # y = [None if t.shape[0] == 0 else t for t in y]
+        # print(y)
+
+        # #################################################################################################################
+        # #################################################################################################################
+
+        y2 = model([image[:,:,::-1] for image in images])
+
+        y2 = [t.cpu().detach().numpy() for t in y2.xyxy]
+        y2 = [t for t in y2]
         # Drop non persons
-        y = [t[t[:,5] == 0.0] for t in y]
-
+        # y2 = [t[t[:,5] == 0.0] for t in y2]
+        # print(y)
+        
         # Add dummy columne to fulfill size
-        y = [np.c_[ t[:, 0:4], np.zeros(t.shape[0]), t[:,4:6] ] for t in y] 
+        y2 = [np.c_[ t[:, 0:4], np.zeros(t.shape[0]), t[:,4:6] ] for t in y2] 
+
+        for c in y2:
+            c[:,0] =  c[:,0]/images[0].shape[1]*416
+            c[:,2] =  c[:,2]/images[0].shape[1]*416
+            c[:,1] =  c[:,1]/images[0].shape[0]*416
+            c[:,3] =  c[:,3]/images[0].shape[0]*416
+
+
 
         # If no predictions then return None
-        y = [None if t.shape[0] == 0 else t for t in y]
-        return y
+        y2 = [None if t.shape[0] == 0 else t for t in y2]
+        # print(y2)
+
+        # #################################################################################################################
+        # #################################################################################################################
+        # print("\n\n\n\n\n")
+        return y2
 
     def loadStcResults(self, stc_results_path):
         """
