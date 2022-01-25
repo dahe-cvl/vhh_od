@@ -23,8 +23,8 @@ from os import path
 sys.path.append(path.abspath('../yolov5'))
 sys.path.append(path.abspath('../yolov5/utils'))
 
-from yolov5.utils.general import non_max_suppression
-from yolov5.models.common import Detections
+from ultralytics.yolov5.utils.general import non_max_suppression
+from ultralytics.yolov5.models.common import Detections
 
 Detection_Data = namedtuple('Detection_Data', 'x1 x2 y1 y2 ids obj_class obj_conf class_conf num_results')
 
@@ -140,9 +140,14 @@ class OD(object):
         #     # Load checkpoint weights
         #     self.model.load_state_dict(torch.load(self.config_instance.path_pre_trained_model))
 
-        self.model = torch.hub.load('ultralytics/yolov5', 'yolov5x', pretrained=True)
+        # self.model = torch.hub.load('ultralytics/yolov5', 'yolov5x')
+        # self.model.load_state_dict(torch.load("/caa/Homes01/fjogl/yolov5/runs/train/exp/weights/best.pt"))
+        # self.model.load_state_dict(torch.load("/caa/Homes01/fjogl/yolov5/runs/train/exp/weights/best.pt"))
+        # self.model = self.model.fuse()
+
+        self.model = torch.hub.load('ultralytics/yolov5', 'custom', path="/caa/Homes01/fjogl/yolov5/runs/train/exp9/weights/best.pt") 
         self.model.conf = 0.01  # confidence threshold (0-1)
-        self.model.iou = 0.7 # NMS IoU threshold (0-1)
+        # self.model.iou = 0.7 # NMS IoU threshold (0-1)
         # self.model.classes = [0]
 
         printCustom(f"Loading Class Names from \"{self.config_instance.model_class_names_path}\"... ", STDOUT_TYPE.INFO)
@@ -239,7 +244,13 @@ class OD(object):
             else:
                 class_conf = data.class_conf[object_idx]
 
+            # print(self.classes, data.obj_class)
             class_idx = int(data.obj_class[object_idx])
+
+            # Only use classes that the model knows
+            if class_idx + 1 > len(self.classes):
+                continue
+            
             class_name = self.classes[class_idx]
 
             obj_instance = CustObject(oid=instance_id,

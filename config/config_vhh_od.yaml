@@ -106,7 +106,7 @@ OdCore:
   MAX_FRAMES: 16
   ###
   # Enables the classifier
-  USE_CLASSIFIER: 1
+  USE_CLASSIFIER: 0
   ###
   # Enable majority classification, a detected object will be given the classification which appears the most often 
   # (this applies only to classification and not to object detection)
